@@ -19,19 +19,23 @@ def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_e:
+                    character.interact(world)
 
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            character.move(-5, 0)
-        if keys[pygame.K_RIGHT]:
-            character.move(5, 0)
-        if keys[pygame.K_UP]:
-            character.move(0, -5)
-        if keys[pygame.K_DOWN]:
-            character.move(0, 5)
+        if keys[pygame.K_a]:
+            character.move(-5, 0, world)   # Izquierda
+        if keys[pygame.K_d]:
+            character.move(5, 0, world)    # Derecha
+        if keys[pygame.K_w]:
+            character.move(0, -5, world)   # Arriba
+        if keys[pygame.K_s]:
+            character.move(0, 5, world)    # Abajo
 
         world.draw(ventana)
         character.draw(ventana)
+        world.draw_inventory(ventana, character)
 
         pygame.display.flip()
         clock.tick(60)
