@@ -13,6 +13,7 @@ def main():
     clock = pygame.time.Clock()
     world = World(constants.WIDTH, constants.HEIGHT)
     character = Character(constants.WIDTH // 2, constants.HEIGHT // 2)
+    show_inventory = False
 
     while True:
         for event in pygame.event.get():
@@ -22,6 +23,12 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
                     character.interact(world)
+                if event.key == pygame.K_i:
+                    show_inventory = not show_inventory
+                    if show_inventory:
+                        print("Inventario abierto")
+                    else:
+                        print("Inventario cerrado")
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_a]:
@@ -34,8 +41,9 @@ def main():
             character.move(0, 5, world)    # Abajo
 
         world.draw(ventana)
-        character.draw(ventana)
-        world.draw_inventory(ventana, character)
+        character.draw(ventana, world)
+        if show_inventory:
+            character.draw_inventory(ventana)
 
         pygame.display.flip()
         clock.tick(60)

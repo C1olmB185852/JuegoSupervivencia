@@ -51,8 +51,4 @@ class World:
 
     def draw_inventory(self, screen, character):
         font = pygame.font.Font(None, 36)
-        wood_text = font.render(f"Madera: {character.inventario['madera']}", True, (255, 255, 255))
-
-        stone_text = font.render(f"Piedra: {character.inventario['piedra']}", True, (255, 255, 255))
-        screen.blit(wood_text, (10, 10))
-        screen.blit(stone_text, (10, 50))
+        instruction_text = font.render("Presiona 'E' para interactuar", True, constants.WHITE)
