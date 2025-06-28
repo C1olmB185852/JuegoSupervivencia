@@ -7,7 +7,7 @@ class Character:
     def __init__(self, x, y):
         self.global_x = x
         self.global_y = y
-        self.inventario = {"madera": 0, "piedra": 0}
+        self.inventario = [[None, 0] for _ in range(constants.INVENTORY_SLOTS)] # [item_name, quantity]
         self.crafting_grid = [None, None, None, None]  # 2x2 crafting grid
         self.crafting_qty = [0, 0, 0, 0]
         self.drag_item = None
@@ -32,9 +32,9 @@ class Character:
         data = {
             "global_x": self.global_x,
             "global_y": self.global_y,
-            "inventario": self.inventario,
+            "inventario": self.inventario, # Ahora es una lista de listas
             "crafting_grid": self.crafting_grid,
-            "crafting_qty": self.crafting_qty
+            """crafting_qty""": self.crafting_qty
         }
         with open(filename, "w") as f:
             json.dump(data, f)
@@ -46,7 +46,13 @@ class Character:
             data = json.load(f)
             self.global_x = data.get("global_x", self.global_x)
             self.global_y = data.get("global_y", self.global_y)
-            self.inventario = data.get("inventario", self.inventario)
+            # Cargar el inventario con la nueva estructura
+            loaded_inventory = data.get("inventario", [])
+            self.inventario = [[None, 0] for _ in range(constants.INVENTORY_SLOTS)]
+            for i, item_data in enumerate(loaded_inventory):
+                if i < constants.INVENTORY_SLOTS and isinstance(item_data, list) and len(item_data) == 2:
+                    self.inventario[i] = item_data
+            
             self.crafting_grid = data.get("crafting_grid", [None, None, None, None])
             self.crafting_qty = data.get("crafting_qty", [0, 0, 0, 0])
 
@@ -54,6 +60,40 @@ class Character:
         path = os.path.join("assets", "img", "objetos", filename)
         image = pygame.image.load(path).convert_alpha()
         return pygame.transform.scale(image, (40, 40))
+
+    def get_item_quantity(self, item_name):
+        # Esta función ya no es tan relevante con la nueva estructura, pero la mantendremos por si acaso
+        total_qty = 0
+        for item, qty in self.inventario:
+            if item == item_name:
+                total_qty += qty
+        return total_qty
+
+    def add_item_to_inventory(self, item_name, quantity):
+        # Intentar apilar en stacks existentes
+        for i, (item, qty) in enumerate(self.inventario):
+            if item == item_name and qty < constants.MAX_STACK_SIZE:
+                space_left = constants.MAX_STACK_SIZE - qty
+                add_amount = min(quantity, space_left)
+                self.inventario[i][1] += add_amount
+                quantity -= add_amount
+                if quantity == 0:
+                    return True # Todo el item fue añadido
+        
+        # Si aún quedan items, buscar slots vacíos
+        if quantity > 0:
+            for i, (item, qty) in enumerate(self.inventario):
+                if item is None or qty == 0: # Slot vacío
+                    add_amount = min(quantity, constants.MAX_STACK_SIZE)
+                    self.inventario[i] = [item_name, add_amount]
+                    quantity -= add_amount
+                    if quantity == 0:
+                        return True # Todo el item fue añadido
+        
+        if quantity > 0:
+            print(f"Inventario lleno, no se pudo añadir {quantity} de {item_name}")
+            return False # No se pudo añadir todo
+        return True
 
     def draw(self, screen, world):
         self.x = screen.get_width() // 2
@@ -97,7 +137,7 @@ class Character:
                 if tree.chop():
                     print(f"Le quitaste madera al árbol. Le quedan {tree.wood}")
                     if tree.wood == 0:
-                        self.inventario["madera"] += 1
+                        self.add_item_to_inventory("madera", 1)
                         print("Has talado un árbol y tienes madera")
                         world.trees.remove(tree)
                 else:
@@ -106,7 +146,7 @@ class Character:
         for stone in world.small_stones[:]:
             if self.is_near(stone):
                 if stone.stone > 0:
-                    self.inventario["piedra"] += 1
+                    self.add_item_to_inventory("piedra", 1)
                     stone.stone -= 1
                     print("has recogido piedra")
                     if stone.stone == 0:
@@ -116,87 +156,92 @@ class Character:
                 break
 
     def draw_inventory(self, screen, fullscreen=False):
-        # Fondo central tipo ventana
-        inv_width = 600
-        inv_height = 340
+        # Dimensiones y posición del fondo del inventario
+        inv_width = 750  # Ancho aumentado
+        inv_height = 500 # Alto aumentado
         inv_x = (screen.get_width() - inv_width) // 2
-        if fullscreen:
-            inv_y = screen.get_height() - inv_height - 20
-        else:
-            inv_y = (screen.get_height() - inv_height) // 2
+        inv_y = (screen.get_height() - inv_height) // 2
+
+        # Fondo con transparencia y borde
         inv_bg = pygame.Surface((inv_width, inv_height), pygame.SRCALPHA)
-        inv_bg.fill((40, 40, 40, 230))
-        pygame.draw.rect(inv_bg, (180, 180, 180), (0, 0, inv_width, inv_height), 4, border_radius=10)
+        inv_bg.fill((30, 30, 30, 220))  # Fondo más oscuro y transparente
+        pygame.draw.rect(inv_bg, (70, 70, 70), (0, 0, inv_width, inv_height), 5, border_radius=15) # Borde más grueso
         screen.blit(inv_bg, (inv_x, inv_y))
 
         # Título
-        font = pygame.font.Font(None, 48)
-        title = font.render("Inventario", True, (255, 255, 255))
-        screen.blit(title, (inv_x + inv_width // 2 - title.get_width() // 2, inv_y + 10))
+        font = pygame.font.Font(None, 52) # Fuente un poco más grande
+        title = font.render("INVENTARIO", True, (255, 255, 255))
+        screen.blit(title, (inv_x + inv_width // 2 - title.get_width() // 2, inv_y + 20))
 
-        # Slots de inventario (5x4)
-        slot_size = 56
-        margin = 10
-        cols, rows = 5, 4
-        start_x = inv_x + 30
-        start_y = inv_y + 70
+        # Slots de inventario (ajustados para 20 slots en 5x4)
+        slot_size = 60 # Slots un poco más grandes
+        margin = 12 # Margen ligeramente mayor
+        cols, rows = 5, 4 # 20 slots en total
+        
+        # Calcular el punto de inicio para centrar los slots de inventario
+        inv_slots_total_width = cols * slot_size + (cols - 1) * margin
+        inv_slots_total_height = rows * slot_size + (rows - 1) * margin
+        start_x_inv = inv_x + (inv_width // 2 - inv_slots_total_width // 2) - 100 # Ajuste para mover a la izquierda
+        start_y_inv = inv_y + 80
 
-        # Construir lista de items y cantidades
-        items = []
-        for item, qty in self.inventario.items():
-            if qty > 0:
-                items.append((item, qty))
-        # Rellenar hasta 20 slots
-        while len(items) < 20:
-            items.append((None, 0))
-
-        # Dibuja los slots y los items
+        # Dibuja los slots y los items del inventario
         self.inv_slot_rects = []
-        idx = 0
-        for row in range(rows):
-            for col in range(cols):
-                rect = pygame.Rect(start_x + col * (slot_size + margin), start_y + row * (slot_size + margin), slot_size, slot_size)
-                self.inv_slot_rects.append(rect)
-                pygame.draw.rect(screen, (180, 180, 180), rect, border_radius=6)
-                pygame.draw.rect(screen, (80, 80, 80), rect, 2, border_radius=6)
-                item, qty = items[idx]
-                if item is not None and not (self.drag_origin == ("inv", idx) and self.drag_item is not None):
-                    img = self.item_images[item]
-                    img_rect = img.get_rect(center=rect.center)
-                    screen.blit(img, img_rect)
-                    qty_font = pygame.font.Font(None, 28)
-                    qty_text = qty_font.render(str(qty), True, (255,255,255))
-                    screen.blit(qty_text, (rect.right - 22, rect.bottom - 26))
-                idx += 1
+        for i in range(constants.INVENTORY_SLOTS):
+            row = i // cols
+            col = i % cols
+            rect = pygame.Rect(start_x_inv + col * (slot_size + margin), start_y_inv + row * (slot_size + margin), slot_size, slot_size)
+            self.inv_slot_rects.append(rect)
+            pygame.draw.rect(screen, (100, 100, 100), rect, border_radius=8) # Fondo de slot más oscuro
+            pygame.draw.rect(screen, (150, 150, 150), rect, 3, border_radius=8) # Borde de slot más claro y grueso
+
+            item_name, item_qty = self.inventario[i]
+
+            if item_name is not None and item_qty > 0 and not (self.drag_origin == ("inv", i) and self.drag_item is not None):
+                img = self.item_images[item_name]
+                img_rect = img.get_rect(center=rect.center)
+                screen.blit(img, img_rect)
+                qty_font = pygame.font.Font(None, 30) # Fuente de cantidad ligeramente más grande
+                qty_text = qty_font.render(str(item_qty), True, (255,255,255))
+                screen.blit(qty_text, (rect.right - 25, rect.bottom - 28)) # Posición ajustada
 
         # Área de crafteo (2x2)
-        craft_x = inv_x + inv_width - 2 * slot_size - margin - 30
-        craft_y = inv_y + 110
+        craft_slot_size = 60
+        craft_margin = 12
+        craft_cols, craft_rows = 2, 2
+        
+        # Calcular el punto de inicio para centrar los slots de crafteo
+        craft_slots_total_width = craft_cols * craft_slot_size + (craft_cols - 1) * craft_margin
+        craft_slots_total_height = craft_rows * craft_slot_size + (craft_rows - 1) * craft_margin
+        start_x_craft = inv_x + (inv_width // 2 - craft_slots_total_width // 2) + 150 # Ajuste para mover a la derecha
+        start_y_craft = inv_y + 120
+
         self.craft_slot_rects = []
         for i in range(4):
             row = i // 2
             col = i % 2
-            rect = pygame.Rect(craft_x + col * (slot_size + margin), craft_y + row * (slot_size + margin), slot_size, slot_size)
+            rect = pygame.Rect(start_x_craft + col * (craft_slot_size + craft_margin), start_y_craft + row * (craft_slot_size + craft_margin), craft_slot_size, craft_slot_size)
             self.craft_slot_rects.append(rect)
-            pygame.draw.rect(screen, (200, 200, 200), rect, border_radius=6)
-            pygame.draw.rect(screen, (100, 100, 100), rect, 2, border_radius=6)
+            pygame.draw.rect(screen, (100, 100, 100), rect, border_radius=8)
+            pygame.draw.rect(screen, (150, 150, 150), rect, 3, border_radius=8)
+            
             item = self.crafting_grid[i]
             qty = self.crafting_qty[i]
             if item is not None and not (self.drag_origin == ("craft", i) and self.drag_item is not None):
                 img = self.item_images[item]
                 img_rect = img.get_rect(center=rect.center)
                 screen.blit(img, img_rect)
-                qty_font = pygame.font.Font(None, 28)
+                qty_font = pygame.font.Font(None, 30)
                 qty_text = qty_font.render(str(qty), True, (255,255,255))
-                screen.blit(qty_text, (rect.right - 22, rect.bottom - 26))
+                screen.blit(qty_text, (rect.right - 25, rect.bottom - 28))
 
-        # Flecha y resultado (solo decorativo)
-        arrow_font = pygame.font.Font(None, 48)
-        arrow = arrow_font.render("→", True, (255,255,255))
-        screen.blit(arrow, (craft_x + 2 * (slot_size + margin) + 10, craft_y + slot_size // 2 - 10))
-        result_rect = pygame.Rect(craft_x + 3 * (slot_size + margin) + 10, craft_y + slot_size // 2 - slot_size // 2, slot_size, slot_size)
-        pygame.draw.rect(screen, (220, 220, 220), result_rect, border_radius=6)
-        pygame.draw.rect(screen, (120, 120, 120), result_rect, 2, border_radius=6)
+        # Flecha y resultado
+        arrow_font = pygame.font.Font(None, 60) # Flecha más grande
+        arrow = arrow_font.render("→", True, (200,200,200)) # Color más suave
+        screen.blit(arrow, (start_x_craft + craft_slots_total_width + 15, start_y_craft + craft_slots_total_height // 2 - 20))
+        
+        result_rect = pygame.Rect(start_x_craft + craft_slots_total_width + 60, start_y_craft + craft_slots_total_height // 2 - craft_slot_size // 2, craft_slot_size, craft_slot_size)
+        pygame.draw.rect(screen, (100, 100, 100), result_rect, border_radius=8)
+        pygame.draw.rect(screen, (150, 150, 150), result_rect, 3, border_radius=8)
 
         # Si estás arrastrando un item, dibújalo en el mouse
         if self.drag_item is not None:
@@ -204,94 +249,188 @@ class Character:
             img = self.item_images[self.drag_item]
             img_rect = img.get_rect(center=(mx, my))
             screen.blit(img, img_rect)
-            qty_font = pygame.font.Font(None, 28)
+            qty_font = pygame.font.Font(None, 30)
             qty_text = qty_font.render(str(self.drag_qty), True, (255,255,255))
-            screen.blit(qty_text, (mx + 12, my + 12))
+            screen.blit(qty_text, (mx + 15, my + 15)) # Posición ajustada para el texto de cantidad
 
         # Texto para cerrar
-        close_font = pygame.font.Font(None, 28)
-        close_text = close_font.render("Presiona 'I' para cerrar", True, (255, 255, 255))
-        screen.blit(close_text, (inv_x + inv_width // 2 - close_text.get_width() // 2, inv_y + inv_height - 36))
+        close_font = pygame.font.Font(None, 32) # Fuente ligeramente más grande
+        close_text = close_font.render("Presiona 'I' para cerrar", True, (200, 200, 200)) # Color más suave
+        screen.blit(close_text, (inv_x + inv_width // 2 - close_text.get_width() // 2, inv_y + inv_height - 40))
 
     def handle_inventory_event(self, event):
-        # Arrastrar y soltar entre inventario y crafting
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        mx, my = pygame.mouse.get_pos()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Click izquierdo (recoger stack completo)
+            if event.button == 1:
+                # Si no hay item arrastrándose
+                if self.drag_item is None:
+                    # Intentar recoger de inventario
+                    for idx, rect in enumerate(self.inv_slot_rects):
+                        if rect.collidepoint(mx, my):
+                            item_name, item_qty = self.inventario[idx]
+                            if item_name is not None and item_qty > 0:
+                                self.drag_item = item_name
+                                self.drag_qty = item_qty
+                                self.drag_origin = ("inv", idx)
+                                self.inventario[idx] = [None, 0] # Vaciar slot de origen
+                                return
+                    # Intentar recoger de crafting
+                    for idx, rect in enumerate(self.craft_slot_rects):
+                        if rect.collidepoint(mx, my):
+                            item_name = self.crafting_grid[idx]
+                            item_qty = self.crafting_qty[idx]
+                            if item_name is not None and item_qty > 0:
+                                self.drag_item = item_name
+                                self.drag_qty = item_qty
+                                self.drag_origin = ("craft", idx)
+                                self.crafting_grid[idx] = None
+                                self.crafting_qty[idx] = 0
+                                return
+                # Si ya hay un item arrastrándose, intentar soltarlo (manejará en MOUSEBUTTONUP)
+
+            # Click derecho (dividir stack)
+            elif event.button == 3:
+                # Si no hay item arrastrándose
+                if self.drag_item is None:
+                    # Intentar recoger la mitad de un stack de inventario
+                    for idx, rect in enumerate(self.inv_slot_rects):
+                        if rect.collidepoint(mx, my):
+                            item_name, item_qty = self.inventario[idx]
+                            if item_name is not None and item_qty > 1: # Solo si hay más de 1
+                                self.drag_item = item_name
+                                self.drag_qty = (item_qty + 1) // 2 # Redondear hacia arriba
+                                self.drag_origin = ("inv", idx)
+                                self.inventario[idx][1] -= self.drag_qty
+                                return
+                    # Intentar recoger la mitad de un stack de crafting
+                    for idx, rect in enumerate(self.craft_slot_rects):
+                        if rect.collidepoint(mx, my):
+                            item_name = self.crafting_grid[idx]
+                            item_qty = self.crafting_qty[idx]
+                            if item_name is not None and item_qty > 1:
+                                self.drag_item = item_name
+                                self.drag_qty = (item_qty + 1) // 2
+                                self.drag_origin = ("craft", idx)
+                                self.crafting_qty[idx] -= self.drag_qty
+                                return
+                # Si ya hay un item arrastrándose, intentar soltar uno (manejará en MOUSEBUTTONUP)
+
+        if event.type == pygame.MOUSEBUTTONUP and self.drag_item is not None:
             mx, my = event.pos
-            # Inventario
+            dropped_in_slot = False
+
+            # Intentar soltar en un slot de inventario
             for idx, rect in enumerate(self.inv_slot_rects):
                 if rect.collidepoint(mx, my):
-                    items = [item for item, qty in self.inventario.items() if qty > 0]
-                    # Rellenar hasta 20 slots
-                    while len(items) < 20:
-                        items.append(None)
-                    item = items[idx]
-                    if item is not None and self.inventario[item] > 0:
-                        self.drag_item = item
-                        self.drag_qty = self.inventario[item]
-                        self.drag_origin = ("inv", idx)
-                        break
-            # Crafting
-            for idx, rect in enumerate(self.craft_slot_rects):
-                if rect.collidepoint(mx, my):
-                    item = self.crafting_grid[idx]
-                    qty = self.crafting_qty[idx]
-                    if item is not None and qty > 0:
-                        self.drag_item = item
-                        self.drag_qty = qty
-                        self.drag_origin = ("craft", idx)
+                    target_item, target_qty = self.inventario[idx]
+
+                    # Click izquierdo (soltar stack completo)
+                    if event.button == 1:
+                        # Si el slot de destino está vacío
+                        if target_item is None or target_qty == 0:
+                            self.inventario[idx] = [self.drag_item, self.drag_qty]
+                            dropped_in_slot = True
+                        # Si el slot de destino tiene el mismo item y hay espacio
+                        elif target_item == self.drag_item and target_qty < constants.MAX_STACK_SIZE:
+                            space_left = constants.MAX_STACK_SIZE - target_qty
+                            add_amount = min(self.drag_qty, space_left)
+                            self.inventario[idx][1] += add_amount
+                            self.drag_qty -= add_amount
+                            if self.drag_qty == 0:
+                                dropped_in_slot = True
+                        # Si el slot de destino tiene un item diferente o está lleno, y el origen es inventario, swap
+                        elif self.drag_origin[0] == "inv":
+                            original_idx = self.drag_origin[1]
+                            # Swap de items
+                            self.inventario[original_idx] = [target_item, target_qty]
+                            self.inventario[idx] = [self.drag_item, self.drag_qty]
+                            dropped_in_slot = True
+                    
+                    # Click derecho (soltar un solo item)
+                    elif event.button == 3:
+                        # Si el slot está vacío
+                        if target_item is None or target_qty == 0:
+                            self.inventario[idx] = [self.drag_item, 1]
+                            self.drag_qty -= 1
+                            dropped_in_slot = True
+                        # Si el slot tiene el mismo item y hay espacio
+                        elif target_item == self.drag_item and target_qty < constants.MAX_STACK_SIZE:
+                            self.inventario[idx][1] += 1
+                            self.drag_qty -= 1
+                            dropped_in_slot = True
+                    break
+
+            # Si no se soltó en un slot de inventario, intentar soltar en un slot de crafteo
+            if not dropped_in_slot:
+                for idx, rect in enumerate(self.craft_slot_rects):
+                    if rect.collidepoint(mx, my):
+                        target_item_craft = self.crafting_grid[idx]
+                        target_qty_craft = self.crafting_qty[idx]
+
+                        # Click izquierdo (soltar stack completo)
+                        if event.button == 1:
+                            # Si el slot de destino está vacío
+                            if target_item_craft is None or target_qty_craft == 0:
+                                self.crafting_grid[idx] = self.drag_item
+                                self.crafting_qty[idx] = self.drag_qty
+                                dropped_in_slot = True
+                            # Si el slot de destino tiene el mismo item y hay espacio
+                            elif target_item_craft == self.drag_item and target_qty_craft < constants.MAX_STACK_SIZE:
+                                space_left = constants.MAX_STACK_SIZE - target_qty_craft
+                                add_amount = min(self.drag_qty, space_left)
+                                self.crafting_qty[idx] += add_amount
+                                self.drag_qty -= add_amount
+                                if self.drag_qty == 0:
+                                    dropped_in_slot = True
+                            # Si el slot de destino tiene un item diferente o está lleno, y el origen es crafting, swap
+                            elif self.drag_origin[0] == "craft":
+                                original_idx = self.drag_origin[1]
+                                # Swap de items
+                                self.crafting_grid[original_idx] = target_item_craft
+                                self.crafting_qty[original_idx] = target_qty_craft
+                                self.crafting_grid[idx] = self.drag_item
+                                self.crafting_qty[idx] = self.drag_qty
+                                dropped_in_slot = True
+                        
+                        # Click derecho (soltar un solo item)
+                        elif event.button == 3:
+                            # Si el slot está vacío
+                            if target_item_craft is None or target_qty_craft == 0:
+                                self.crafting_grid[idx] = self.drag_item
+                                self.crafting_qty[idx] = 1
+                                self.drag_qty -= 1
+                                dropped_in_slot = True
+                            # Si el slot tiene el mismo item y hay espacio
+                            elif target_item_craft == self.drag_item and target_qty_craft < constants.MAX_STACK_SIZE:
+                                self.crafting_qty[idx] += 1
+                                self.drag_qty -= 1
+                                dropped_in_slot = True
                         break
 
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.drag_item is not None:
-            mx, my = event.pos
-            # Inventario
-            for idx, rect in enumerate(self.inv_slot_rects):
-                if rect.collidepoint(mx, my):
-                    # Si venía del crafting, mueve a inventario
-                    if self.drag_origin and self.drag_origin[0] == "craft":
-                        cidx = self.drag_origin[1]
-                        # Suma al inventario
-                        self.inventario[self.drag_item] = self.inventario.get(self.drag_item, 0) + self.drag_qty
-                        # Borra del crafting
-                        self.crafting_grid[cidx] = None
-                        self.crafting_qty[cidx] = 0
-                    # Si venía del inventario, no hace nada (o podrías implementar swap)
-                    self.drag_item = None
-                    self.drag_qty = 0
-                    self.drag_origin = None
-                    return
-            # Crafting
-            for idx, rect in enumerate(self.craft_slot_rects):
-                if rect.collidepoint(mx, my):
-                    # Si venía del inventario, mueve a crafting
-                    if self.drag_origin and self.drag_origin[0] == "inv":
-                        # Solo permite poner si está vacío o es el mismo item
-                        if self.crafting_grid[idx] is None:
-                            self.crafting_grid[idx] = self.drag_item
-                            self.crafting_qty[idx] = self.drag_qty
-                            self.inventario[self.drag_item] -= self.drag_qty
-                            if self.inventario[self.drag_item] <= 0:
-                                del self.inventario[self.drag_item]
-                    # Si venía del crafting, swap
-                    elif self.drag_origin and self.drag_origin[0] == "craft":
-                        oidx = self.drag_origin[1]
-                        # Swap entre slots de crafting
-                        if idx != oidx:
-                            self.crafting_grid[oidx], self.crafting_grid[idx] = self.crafting_grid[idx], self.crafting_grid[oidx]
-                            self.crafting_qty[oidx], self.crafting_qty[idx] = self.crafting_qty[idx], self.crafting_qty[oidx]
-                    self.drag_item = None
-                    self.drag_qty = 0
-                    self.drag_origin = None
-                    return
-            # Si sueltas fuera, regresa el item a su origen
-            if self.drag_origin:
+            # Si no se soltó completamente en ningún slot válido, devolver el item restante a su origen
+            if not dropped_in_slot or self.drag_qty > 0:
                 if self.drag_origin[0] == "inv":
-                    # Nada que hacer, ya está en inventario
-                    pass
+                    original_idx = self.drag_origin[1]
+                    # Si el slot original está vacío, o tiene el mismo item y hay espacio
+                    if self.inventario[original_idx][0] is None or \
+                       (self.inventario[original_idx][0] == self.drag_item and self.inventario[original_idx][1] < constants.MAX_STACK_SIZE):
+                        self.inventario[original_idx][0] = self.drag_item
+                        self.inventario[original_idx][1] += self.drag_qty
+                    else: # Buscar un slot vacío si el original no es adecuado
+                        self.add_item_to_inventory(self.drag_item, self.drag_qty)
                 elif self.drag_origin[0] == "craft":
-                    idx = self.drag_origin[1]
-                    self.inventario[self.drag_item] = self.inventario.get(self.drag_item, 0) + self.drag_qty
-                    self.crafting_grid[idx] = None
-                    self.crafting_qty[idx] = 0
+                    original_idx = self.drag_origin[1]
+                    # Si el slot original está vacío, o tiene el mismo item y hay espacio
+                    if self.crafting_grid[original_idx] is None or \
+                       (self.crafting_grid[original_idx] == self.drag_item and self.crafting_qty[original_idx] < constants.MAX_STACK_SIZE):
+                        self.crafting_grid[original_idx] = self.drag_item
+                        self.crafting_qty[original_idx] += self.drag_qty
+                    else: # Buscar un slot vacío en inventario si el original no es adecuado
+                        self.add_item_to_inventory(self.drag_item, self.drag_qty)
+
+            # Resetear el estado de arrastre
             self.drag_item = None
             self.drag_qty = 0
             self.drag_origin = None
@@ -313,13 +452,13 @@ class Character:
             pygame.draw.rect(screen, (180, 180, 180), rect, border_radius=6)
             pygame.draw.rect(screen, (80, 80, 80), rect, 2, border_radius=6)
 
-        items = [item for item, qty in self.inventario.items() if qty > 0]
-        for idx, item in enumerate(items[:slots]):
-            img = self.item_images[item]
-            rect = pygame.Rect(start_x + idx * (slot_size + margin), y, slot_size, slot_size)
-            img_rect = img.get_rect(center=rect.center)
-            screen.blit(img, img_rect)
-            font = pygame.font.Font(None, 28)
-            qty = self.inventario[item]
-            qty_text = font.render(str(qty), True, (255,255,255))
-            screen.blit(qty_text, (rect.right - 22, rect.bottom - 26))
+        items = [item_data for item_data in self.inventario if item_data[0] is not None and item_data[1] > 0]
+        for idx, (item_name, qty) in enumerate(items[:slots]):
+            if item_name in self.item_images: # Añadir esta verificación
+                img = self.item_images[item_name]
+                rect = pygame.Rect(start_x + idx * (slot_size + margin), y, slot_size, slot_size)
+                img_rect = img.get_rect(center=rect.center)
+                screen.blit(img, img_rect)
+                font = pygame.font.Font(None, 28)
+                qty_text = font.render(str(qty), True, (255,255,255))
+                screen.blit(qty_text, (rect.right - 22, rect.bottom - 26))

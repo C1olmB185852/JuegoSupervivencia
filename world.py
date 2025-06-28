@@ -63,13 +63,10 @@ class World:
                 screen.blit(self.gastation, (x, y))
 
         # Dibuja solo los objetos visibles en la pantalla
-        for obj_list in [self.trees, self.small_stones]:
-            for obj in obj_list:
-                if -obj.size < obj.x - character.global_x + character.x < self.width and \
-                   -obj.size < obj.y - character.global_y + character.y < self.height:
+        for obj_list_copy in [list(self.trees), list(self.small_stones)]:
+            for obj in obj_list_copy:
+                if -obj.size < obj.x - character.global_x + screen.get_width() // 2 < self.width and \
+                   -obj.size < obj.y - character.global_y + screen.get_height() // 2 < self.height:
                     obj.draw(screen, character)
 
-    def draw_inventory(self, screen, character):
-        font = pygame.font.Font(None, 36)
-        instruction_text = font.render("Presiona 'E' para interactuar", True, constants.WHITE)
-        screen.blit(instruction_text, (20, 20))
+    
