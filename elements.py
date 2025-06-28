@@ -13,8 +13,11 @@ class Tree:
         self.image = pygame.transform.scale(self.image, (constants.ARBOL, constants.ARBOL))
         self.size = self.image.get_width()
 
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))
+    def draw(self, screen, character):
+        # Dibuja el árbol en posición relativa al personaje (mundo infinito)
+        rel_x = self.x - character.global_x + constants.WIDTH // 2
+        rel_y = self.y - character.global_y + constants.HEIGHT // 2
+        screen.blit(self.image, (rel_x, rel_y))
 
     def chop(self):
         if self.wood > 0:
@@ -33,5 +36,8 @@ class SmallStone:
         self.image = pygame.transform.scale(self.image, (constants.PIEDRA, constants.PIEDRA))
         self.size = self.image.get_width()
 
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))
+    def draw(self, screen, character):
+        # Dibuja la piedra en posición relativa al personaje (mundo infinito)
+        rel_x = self.x - character.global_x + constants.WIDTH // 2
+        rel_y = self.y - character.global_y + constants.HEIGHT // 2
+        screen.blit(self.image, (rel_x, rel_y))

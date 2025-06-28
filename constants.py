@@ -5,7 +5,13 @@ PASTO = 64
 ARBOL = 64
 PIEDRA = 32
 
+CHUNK_SIZE = 500  # Tamaño de cada chunk para el mundo infinito
+
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 BROWN = (165, 42, 42)
+
+MAX_ENERGY = 100
+MAX_FOOD = 100
+MAX_THIRST = 100
