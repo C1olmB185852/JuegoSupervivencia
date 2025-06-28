@@ -14,9 +14,9 @@ class Tree:
         self.size = self.image.get_width()
 
     def draw(self, screen, character):
-        # Dibuja el árbol en posición relativa al personaje (mundo infinito)
-        rel_x = self.x - character.global_x + constants.WIDTH // 2
-        rel_y = self.y - character.global_y + constants.HEIGHT // 2
+        # Dibuja el árbol en posición relativa al personaje
+        rel_x = self.x - character.global_x + screen.get_width() // 2
+        rel_y = self.y - character.global_y + screen.get_height() // 2
         screen.blit(self.image, (rel_x, rel_y))
 
     def chop(self):
@@ -37,7 +37,7 @@ class SmallStone:
         self.size = self.image.get_width()
 
     def draw(self, screen, character):
-        # Dibuja la piedra en posición relativa al personaje (mundo infinito)
-        rel_x = self.x - character.global_x + constants.WIDTH // 2
-        rel_y = self.y - character.global_y + constants.HEIGHT // 2
+        # Dibuja la piedra en posición relativa al personaje
+        rel_x = self.x - character.global_x + screen.get_width() // 2
+        rel_y = self.y - character.global_y + screen.get_height() // 2
         screen.blit(self.image, (rel_x, rel_y))

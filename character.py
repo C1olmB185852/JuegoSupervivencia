@@ -61,10 +61,13 @@ class Character:
         screen.blit(self.image, (self.x, self.y))
 
     def move(self, dx, dy, world):
-        old_x, old_y = self.global_x, self.global_y
-        self.global_x += dx
-        self.global_y += dy
-        if (old_x != self.global_x or old_y != self.global_y):
+        new_x = self.global_x + dx
+        new_y = self.global_y + dy
+
+        # Comprueba colisiones antes de mover al personaje
+        if not world.check_collision(new_x, new_y, self.size):
+            self.global_x = new_x
+            self.global_y = new_y
             if self.paso_cooldown <= 0:
                 if self.paso_channel is None or not self.paso_channel.get_busy():
                     self.paso_channel = self.sonido_pasos.play()
